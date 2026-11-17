@@ -104,6 +104,30 @@ class GestureLogicTest {
     }
 
     @Test
+    fun singleTap_stillPendingWhenNextDownArrivesOutside300msWindow_returnsSingleTapPauseOnDown() {
+        // First tap completes at t = 10_100
+        classifier.onDown(100f, 100f)
+        fakeTimeMs += 100L
+        assertEquals(TouchOutcome.None, classifier.onUp(100f, 100f))
+
+        // 350 ms pass without onSingleTapTimeout being called yet; new press starts outside 300 ms window
+        fakeTimeMs += 350L
+        assertEquals(
+            TouchOutcome.Command(Protocol.CMD_SINGLE_TAP_PAUSE),
+            classifier.onDown(100f, 100f)
+        )
+
+        // The new press itself resolves normally as a fresh tap after its own 300 ms window
+        fakeTimeMs += 100L
+        assertEquals(TouchOutcome.None, classifier.onUp(100f, 100f))
+        fakeTimeMs += 300L
+        assertEquals(
+            TouchOutcome.Command(Protocol.CMD_SINGLE_TAP_PAUSE),
+            classifier.onSingleTapTimeout()
+        )
+    }
+
+    @Test
     fun doubleTap_secondTapWithin300ms_sendsDoubleTapLikeOnly() {
         // First tap
         classifier.onDown(100f, 100f)

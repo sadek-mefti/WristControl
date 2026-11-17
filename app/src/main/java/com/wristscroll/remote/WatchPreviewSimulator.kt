@@ -410,11 +410,16 @@ fun WatchRemoteInteractiveSimulator(
                                     down.consume()
 
                                     var lastPos = down.position
-                                    touchClassifier.onDown(
+                                    val downOutcome = touchClassifier.onDown(
                                         x = down.position.x,
                                         y = down.position.y,
                                         timeMs = SystemClock.uptimeMillis()
                                     )
+                                    if (downOutcome != TouchOutcome.None) {
+                                        pendingSingleTapJob?.cancel()
+                                        pendingSingleTapJob = null
+                                        applyOutcome(downOutcome, "Single Tap (flushed on next down)")
+                                    }
 
                                     holdJob?.cancel()
                                     holdJob = coroutineScope.launch {

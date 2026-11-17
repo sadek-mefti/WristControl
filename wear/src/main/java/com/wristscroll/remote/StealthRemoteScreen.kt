@@ -150,11 +150,16 @@ fun StealthRemoteScreen(
                     val downTimeMs = SystemClock.uptimeMillis()
                     var lastPosition = down.position
 
-                    touchClassifier.onDown(
+                    val downOutcome = touchClassifier.onDown(
                         x = down.position.x,
                         y = down.position.y,
                         timeMs = downTimeMs
                     )
+                    if (downOutcome != TouchOutcome.None) {
+                        pendingSingleTapJob?.cancel()
+                        pendingSingleTapJob = null
+                        dispatchTouchOutcome(downOutcome)
+                    }
 
                     holdJob?.cancel()
                     holdJob = coroutineScope.launch {

@@ -62,12 +62,17 @@ class TouchGestureClassifier(
 
     fun onDown(x: Float, y: Float, timeMs: Long = clock()): TouchOutcome {
         val previousTapUp = pendingFirstTapUpTimeMs
+        val expiredFirstTapOutcome = if (previousTapUp != null &&
+            (timeMs - previousTapUp) > DOUBLE_TAP_WINDOW_MS
+        ) {
+            pendingFirstTapUpTimeMs = null
+            TouchOutcome.Command(Protocol.CMD_SINGLE_TAP_PAUSE)
+        } else {
+            TouchOutcome.None
+        }
+
         isSecondPressInDoubleTapWindow =
             previousTapUp != null && (timeMs - previousTapUp) <= DOUBLE_TAP_WINDOW_MS
-
-        if (!isSecondPressInDoubleTapWindow) {
-            pendingFirstTapUpTimeMs = null
-        }
 
         isPointerDown = true
         downX = x
@@ -76,7 +81,7 @@ class TouchGestureClassifier(
         stayedWithinSlop = true
         pressOutcomeResolved = false
 
-        return TouchOutcome.None
+        return expiredFirstTapOutcome
     }
 
     fun onMove(x: Float, y: Float, timeMs: Long = clock()): TouchOutcome {

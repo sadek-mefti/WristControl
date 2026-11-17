@@ -334,7 +334,7 @@ class WristScrollAccessibilityService : AccessibilityService() {
                 val cx1 = (0.50f * w).coerceIn(1f, w - 1f)
                 val cy1 = (0.50f * h).coerceIn(1f, h - 1f)
                 val cx2 = (cx1 + DOUBLE_TAP_OFFSET_PX).coerceIn(1f, w - 1f)
-                val cy2 = (cy1 - DOUBLE_TAP_OFFSET_PX).coerceIn(1f, w - 1f)
+                val cy2 = (cy1 - DOUBLE_TAP_OFFSET_PX).coerceIn(1f, h - 1f)
 
                 val path1 = Path().apply { moveTo(cx1, cy1) }
                 val path2 = Path().apply { moveTo(cx2, cy2) }
