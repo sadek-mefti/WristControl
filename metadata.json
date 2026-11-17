@@ -1,0 +1,6 @@
+{
+  "name": "WristScroll",
+  "description": "Eyes-free Wear OS watch remote and Android AccessibilityService companion for vertical video feeds and photo carousels.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

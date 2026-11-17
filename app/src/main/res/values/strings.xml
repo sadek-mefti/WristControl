@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">WristScroll</string>
+    <string name="accessibility_service_label">WristScroll Gesture Receiver</string>
+    <string name="accessibility_service_description">Performs feed scroll, carousel swipe, pause tap, and double-tap like gestures triggered from your paired Wear OS watch in allowed media apps.</string>
+    <string name="service_card_title">Accessibility Service</string>
+    <string name="service_enabled">Enabled &amp; Ready</string>
+    <string name="service_disabled">Disabled — Required for Gestures</string>
+    <string name="open_accessibility_settings">Open Accessibility Settings</string>
+    <string name="watch_card_title">Watch Connection</string>
+    <string name="watch_connected">Connected: %1$s</string>
+    <string name="watch_disconnected">Disconnected</string>
+    <string name="test_ping_button">Test Ping</string>
+    <string name="test_pad_title">Gesture Test Pad (3s Countdown)</string>
+    <string name="btn_scroll_up">Scroll Up</string>
+    <string name="btn_scroll_down">Scroll Down</string>
+    <string name="btn_carousel_left">Carousel Left</string>
+    <string name="btn_carousel_right">Carousel Right</string>
+    <string name="btn_single_tap">Single Tap</string>
+    <string name="btn_double_tap_like">Double-Tap Like</string>
+    <string name="tuning_card_title">Gesture Tuning &amp; Allowlist</string>
+    <string name="allow_any_app_label">Allow in any app</string>
+    <string name="allow_any_app_subtitle">Skip package allowlist check (TikTok, Reels, YouTube)</string>
+    <string name="log_card_title">Live Command &amp; Latency Log</string>
+    <string name="clear_log">Clear</string>
+</resources>

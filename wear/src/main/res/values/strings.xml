@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">WristScroll</string>
+    <string name="tile_label">WristScroll Stealth</string>
+    <string name="tile_description">Launch WristScroll directly in Stealth Remote mode</string>
+    <string name="tile_button_text">Stealth Remote</string>
+    <string name="status_connected">Connected: %1$s</string>
+    <string name="status_disconnected">Disconnected</string>
+    <string name="enter_stealth_remote">Enter Stealth Remote</string>
+    <string name="rotary_mode_label">Rotary Mode</string>
+    <string name="rotary_mode_feed">Feed (Up / Down)</string>
+    <string name="rotary_mode_carousel">Carousel (Left / Right)</string>
+    <string name="sensitivity_label">Rotary Sensitivity</string>
+    <string name="sensitivity_low">Low</string>
+    <string name="sensitivity_medium">Med</string>
+    <string name="sensitivity_high">High</string>
+</resources>
