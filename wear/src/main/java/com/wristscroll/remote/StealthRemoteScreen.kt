@@ -17,12 +17,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -32,11 +29,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.rotary.onRotaryScrollEvent
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
-import com.wristscroll.remote.shared.Protocol
-import java.util.concurrent.atomic.AtomicBoolean
-import kotlin.math.abs
+import com.wristscroll.remote.shared.RotaryAccumulator
+import com.wristscroll.remote.shared.TouchGestureClassifier
+import com.wristscroll.remote.shared.TouchOutcome
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -51,15 +50,9 @@ const val STEALTH_STATUS_DOT_ALPHA: Float = 0.10f
  * Cooldown duration after a rotary command fires during which incoming rotary
  * scroll events are ignored and not added to the running total.
  */
-const val ROTARY_COOLDOWN_MS: Long = 300L
+const val ROTARY_COOLDOWN_MS: Long = RotaryAccumulator.DEFAULT_COOLDOWN_MS
 
-/**
- * Touch gesture timing and distance constants for Stealth Remote.
- */
 private const val DRAG_THRESHOLD_DP = 35f
-private const val TAP_MAX_DURATION_MS = 400L
-private const val DOUBLE_TAP_WINDOW_MS = 300L
-private const val HOLD_EXIT_DURATION_MS = 1500L
 
 @Composable
 fun StealthRemoteScreen(
@@ -70,6 +63,8 @@ fun StealthRemoteScreen(
     onExitStealth: () -> Unit
 ) {
     val context = LocalContext.current
+    val density = LocalDensity.current
+    val viewConfiguration = LocalViewConfiguration.current
     val focusRequester = remember { FocusRequester() }
     val coroutineScope = rememberCoroutineScope()
 
@@ -77,6 +72,24 @@ fun StealthRemoteScreen(
     val currentSensitivity by rememberUpdatedState(sensitivity)
     val currentOnSendCommand by rememberUpdatedState(onSendCommand)
     val currentOnExitStealth by rememberUpdatedState(onExitStealth)
+
+    val rotaryAccumulator = remember {
+        RotaryAccumulator(
+            cooldownMs = ROTARY_COOLDOWN_MS,
+            clock = { SystemClock.uptimeMillis() }
+        )
+    }
+
+    val dragThresholdPx = remember(density) { with(density) { DRAG_THRESHOLD_DP.dp.toPx() } }
+    val touchSlopPx = viewConfiguration.touchSlop
+
+    val touchClassifier = remember(dragThresholdPx, touchSlopPx) {
+        TouchGestureClassifier(
+            dragThresholdPx = dragThresholdPx,
+            touchSlopPx = touchSlopPx,
+            clock = { SystemClock.uptimeMillis() }
+        )
+    }
 
     // Keep screen on while Stealth Remote is active; clear when leaving
     DisposableEffect(context) {
@@ -97,8 +110,13 @@ fun StealthRemoteScreen(
         focusRequester.requestFocus()
     }
 
-    var accumulatedRotaryScroll by remember { mutableFloatStateOf(0f) }
-    var lastRotaryCommandUptimeMs by remember { mutableLongStateOf(0L) }
+    fun dispatchTouchOutcome(outcome: TouchOutcome) {
+        when (outcome) {
+            TouchOutcome.None -> Unit
+            is TouchOutcome.Command -> currentOnSendCommand(outcome.command)
+            TouchOutcome.HoldExit -> currentOnExitStealth()
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -107,86 +125,45 @@ fun StealthRemoteScreen(
             .testTag("stealth_remote_canvas")
             // Exact required order: onRotaryScrollEvent -> focusRequester -> focusable()
             .onRotaryScrollEvent { event ->
-                val now = SystemClock.uptimeMillis()
-                // Ignore rotary events for 300 ms after a command fires and do not add them to total
-                if (now - lastRotaryCommandUptimeMs < ROTARY_COOLDOWN_MS) {
-                    return@onRotaryScrollEvent true
-                }
-
-                val delta = event.verticalScrollPixels
-                if (delta == 0f) {
-                    return@onRotaryScrollEvent true
-                }
-
-                // Reset running total whenever the direction reverses
-                if (accumulatedRotaryScroll != 0f &&
-                    (delta > 0f) != (accumulatedRotaryScroll > 0f)
-                ) {
-                    accumulatedRotaryScroll = 0f
-                }
-
-                accumulatedRotaryScroll += delta
-                val threshold = currentSensitivity.thresholdPx
-
-                if (abs(accumulatedRotaryScroll) >= threshold) {
-                    val isPositive = accumulatedRotaryScroll > 0f
-                    accumulatedRotaryScroll = 0f
-                    lastRotaryCommandUptimeMs = now
-
-                    val command = when (currentRotaryMode) {
-                        RotaryMode.FEED -> if (isPositive) {
-                            Protocol.CMD_NEXT_ITEM
-                        } else {
-                            Protocol.CMD_PREV_ITEM
-                        }
-
-                        RotaryMode.CAROUSEL -> if (isPositive) {
-                            Protocol.CMD_SWIPE_LEFT
-                        } else {
-                            Protocol.CMD_SWIPE_RIGHT
-                        }
-                    }
+                val command = rotaryAccumulator.onScroll(
+                    deltaPixels = event.verticalScrollPixels,
+                    thresholdPx = currentSensitivity.thresholdPx,
+                    isCarouselMode = currentRotaryMode == RotaryMode.CAROUSEL,
+                    timeMs = SystemClock.uptimeMillis()
+                )
+                if (command != null) {
                     currentOnSendCommand(command)
                 }
                 true
             }
             .focusRequester(focusRequester)
             .focusable()
-            // Single unified touch recognizer using awaitEachGesture
-            .pointerInput(Unit) {
-                val dragThresholdPx = DRAG_THRESHOLD_DP.dp.toPx()
-                val touchSlopPx = viewConfiguration.touchSlop
-
-                var lastTapUpTimeMs = 0L
+            // Single unified touch recognizer delegating to TouchGestureClassifier
+            .pointerInput(touchClassifier) {
                 var pendingSingleTapJob: Job? = null
+                var holdJob: Job? = null
 
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     down.consume()
 
                     val downTimeMs = SystemClock.uptimeMillis()
-                    val startPosition = down.position
+                    var lastPosition = down.position
 
-                    // Check if this press started within 300 ms of a previous valid tap ending
-                    val isSecondPressWithinWindow =
-                        lastTapUpTimeMs > 0L && (downTimeMs - lastTapUpTimeMs) <= DOUBLE_TAP_WINDOW_MS
+                    touchClassifier.onDown(
+                        x = down.position.x,
+                        y = down.position.y,
+                        timeMs = downTimeMs
+                    )
 
-                    if (isSecondPressWithinWindow) {
-                        pendingSingleTapJob?.cancel()
-                        pendingSingleTapJob = null
-                    }
-
-                    val outcomeFired = AtomicBoolean(false)
-                    var stayedWithinSlop = true
-
-                    // 1500 ms hold timer that fires while the finger is still down
-                    val holdJob = coroutineScope.launch {
-                        delay(HOLD_EXIT_DURATION_MS)
-                        if (stayedWithinSlop && outcomeFired.compareAndSet(false, true)) {
+                    holdJob?.cancel()
+                    holdJob = coroutineScope.launch {
+                        delay(TouchGestureClassifier.HOLD_EXIT_DURATION_MS)
+                        val holdOutcome = touchClassifier.onHoldTimeout(SystemClock.uptimeMillis())
+                        if (holdOutcome != TouchOutcome.None) {
                             pendingSingleTapJob?.cancel()
                             pendingSingleTapJob = null
-                            lastTapUpTimeMs = 0L
-                            currentOnExitStealth()
+                            dispatchTouchOutcome(holdOutcome)
                         }
                     }
 
@@ -198,76 +175,49 @@ fun StealthRemoteScreen(
 
                         if (change == null || !change.pressed) {
                             pointerDown = false
-                            change?.consume()
+                            if (change != null) {
+                                lastPosition = change.position
+                                change.consume()
+                            }
                             break
                         }
 
+                        lastPosition = change.position
                         change.consume()
 
-                        if (outcomeFired.get()) {
-                            // Gesture already produced a drag or 1.5s hold exit; ignore rest of press
-                            continue
-                        }
-
-                        val dx = change.position.x - startPosition.x
-                        val dy = change.position.y - startPosition.y
-                        val distance = kotlin.math.hypot(dx, dy)
-
-                        if (stayedWithinSlop && distance > touchSlopPx) {
-                            stayedWithinSlop = false
-                            holdJob.cancel()
-                        }
-
-                        // Drag: when movement passes 35 dp, fire dominant axis straight away
-                        if (abs(dx) >= dragThresholdPx || abs(dy) >= dragThresholdPx) {
-                            if (outcomeFired.compareAndSet(false, true)) {
-                                holdJob.cancel()
-                                pendingSingleTapJob?.cancel()
-                                pendingSingleTapJob = null
-                                lastTapUpTimeMs = 0L
-
-                                val dragCommand = if (abs(dy) >= abs(dx)) {
-                                    if (dy < 0f) Protocol.CMD_NEXT_ITEM else Protocol.CMD_PREV_ITEM
-                                } else {
-                                    if (dx < 0f) Protocol.CMD_SWIPE_LEFT else Protocol.CMD_SWIPE_RIGHT
-                                }
-                                currentOnSendCommand(dragCommand)
-                            }
+                        val moveOutcome = touchClassifier.onMove(
+                            x = change.position.x,
+                            y = change.position.y,
+                            timeMs = SystemClock.uptimeMillis()
+                        )
+                        if (moveOutcome != TouchOutcome.None) {
+                            holdJob?.cancel()
+                            pendingSingleTapJob?.cancel()
+                            pendingSingleTapJob = null
+                            dispatchTouchOutcome(moveOutcome)
                         }
                     }
 
                     // Finger lifted
-                    holdJob.cancel()
+                    holdJob?.cancel()
 
-                    if (!outcomeFired.get() && stayedWithinSlop) {
-                        val upTimeMs = SystemClock.uptimeMillis()
-                        val pressDurationMs = upTimeMs - downTimeMs
+                    val upOutcome = touchClassifier.onUp(
+                        x = lastPosition.x,
+                        y = lastPosition.y,
+                        timeMs = SystemClock.uptimeMillis()
+                    )
 
-                        // Tap: released within 400 ms that stayed inside touch slop.
-                        // A still press released between 400 ms and 1500 ms does nothing.
-                        if (pressDurationMs <= TAP_MAX_DURATION_MS) {
-                            if (isSecondPressWithinWindow) {
-                                // Second tap completed -> send DOUBLE_TAP_LIKE immediately
-                                lastTapUpTimeMs = 0L
-                                pendingSingleTapJob?.cancel()
-                                pendingSingleTapJob = null
-                                currentOnSendCommand(Protocol.CMD_DOUBLE_TAP_LIKE)
-                            } else {
-                                // First tap completed -> wait 300 ms for a potential second tap
-                                lastTapUpTimeMs = upTimeMs
-                                pendingSingleTapJob?.cancel()
-                                val capturedTapUpTime = upTimeMs
-                                pendingSingleTapJob = coroutineScope.launch {
-                                    delay(DOUBLE_TAP_WINDOW_MS)
-                                    if (lastTapUpTimeMs == capturedTapUpTime) {
-                                        lastTapUpTimeMs = 0L
-                                        currentOnSendCommand(Protocol.CMD_SINGLE_TAP_PAUSE)
-                                    }
-                                }
-                            }
-                        } else {
-                            // Released between 400 ms and 1500 ms -> do nothing
-                            lastTapUpTimeMs = 0L
+                    if (upOutcome != TouchOutcome.None) {
+                        pendingSingleTapJob?.cancel()
+                        pendingSingleTapJob = null
+                        dispatchTouchOutcome(upOutcome)
+                    } else if (touchClassifier.hasPendingFirstTap) {
+                        pendingSingleTapJob?.cancel()
+                        pendingSingleTapJob = coroutineScope.launch {
+                            delay(TouchGestureClassifier.DOUBLE_TAP_WINDOW_MS)
+                            val timeoutOutcome =
+                                touchClassifier.onSingleTapTimeout(SystemClock.uptimeMillis())
+                            dispatchTouchOutcome(timeoutOutcome)
                         }
                     }
                 }

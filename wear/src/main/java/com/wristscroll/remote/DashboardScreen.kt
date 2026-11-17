@@ -30,11 +30,11 @@ import androidx.wear.compose.material.Button
 import androidx.wear.compose.material.ButtonDefaults
 import androidx.wear.compose.material.Chip
 import androidx.wear.compose.material.ChipDefaults
-import androidx.wear.compose.material.CompactChip
 import androidx.wear.compose.material.PositionIndicator
 import androidx.wear.compose.material.Scaffold
 import androidx.wear.compose.material.Text
 import androidx.wear.compose.material.TimeText
+import com.wristscroll.remote.shared.Protocol
 
 private val WearBlack = Color(0xFF000000)
 private val WearSurface = Color(0xFF141A22)
@@ -47,9 +47,13 @@ private val WearTextSecondary = Color(0xFF9AA5B4)
 fun DashboardScreen(
     connectionState: WatchConnectionState,
     preferences: WatchPreferencesState,
+    pingResultText: String?,
+    isPinging: Boolean,
     onToggleRotaryMode: () -> Unit,
     onSelectSensitivity: (RotarySensitivity) -> Unit,
-    onEnterStealth: () -> Unit
+    onEnterStealth: () -> Unit,
+    onPingPhone: () -> Unit,
+    onOpenCalibration: () -> Unit
 ) {
     val listState = rememberScalingLazyListState()
 
@@ -112,7 +116,34 @@ fun DashboardScreen(
                 }
             }
 
-            // 2. Prominent "Enter Stealth Remote" button
+            // 2. Readable error line when phone reported an error (Requirement 2.5)
+            val errorCode = connectionState.lastError
+            if (!errorCode.isNullOrEmpty()) {
+                item {
+                    val readableError = when (errorCode) {
+                        Protocol.ERR_SERVICE_DISABLED ->
+                            stringResource(R.string.error_service_disabled)
+                        Protocol.ERR_PHONE_NOT_READY ->
+                            stringResource(R.string.error_phone_not_ready)
+                        Protocol.ERR_APP_NOT_ALLOWED ->
+                            stringResource(R.string.error_app_not_allowed)
+                        else -> errorCode
+                    }
+                    Text(
+                        text = readableError,
+                        color = WearErrorRed,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                            .testTag("dashboard_error_text")
+                    )
+                }
+            }
+
+            // 3. Prominent "Enter Stealth Remote" button
             item {
                 Chip(
                     onClick = onEnterStealth,
@@ -139,7 +170,7 @@ fun DashboardScreen(
                 )
             }
 
-            // 3. Rotary Mode Toggle (Feed vs Carousel)
+            // 4. Rotary Mode Toggle (Feed vs Carousel)
             item {
                 val modeText = when (preferences.rotaryMode) {
                     RotaryMode.FEED -> stringResource(R.string.rotary_mode_feed)
@@ -173,7 +204,7 @@ fun DashboardScreen(
                 )
             }
 
-            // 4. Sensitivity selector header
+            // 5. Sensitivity selector header
             item {
                 Text(
                     text = stringResource(R.string.sensitivity_label),
@@ -184,7 +215,7 @@ fun DashboardScreen(
                 )
             }
 
-            // 5. Sensitivity row: Low, Medium, High
+            // 6. Sensitivity row: Low, Medium, High
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -215,25 +246,68 @@ fun DashboardScreen(
                 }
             }
 
-            // 6. Optional last error indicator if phone reported an issue
-            if (!connectionState.lastError.isNullOrEmpty()) {
-                item {
-                    CompactChip(
-                        onClick = { },
-                        label = {
-                            Text(
-                                text = connectionState.lastError,
-                                fontSize = 10.sp,
-                                color = WearErrorRed,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        },
-                        colors = ChipDefaults.secondaryChipColors(
-                            backgroundColor = WearSurface
+            // 7. "Ping phone" chip (Requirement 2.6)
+            item {
+                Chip(
+                    onClick = {
+                        if (!isPinging) {
+                            onPingPhone()
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("ping_phone_chip"),
+                    colors = ChipDefaults.secondaryChipColors(
+                        backgroundColor = WearSurface,
+                        contentColor = Color.White,
+                        secondaryContentColor = WearAccentCyan
+                    ),
+                    label = {
+                        Text(
+                            text = stringResource(R.string.ping_phone_label),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White
                         )
-                    )
-                }
+                    },
+                    secondaryLabel = if (pingResultText != null) {
+                        {
+                            Text(
+                                text = pingResultText,
+                                fontSize = 11.sp,
+                                color = if (pingResultText == stringResource(R.string.ping_no_reply)) {
+                                    WearErrorRed
+                                } else {
+                                    WearAccentGreen
+                                }
+                            )
+                        }
+                    } else {
+                        null
+                    }
+                )
+            }
+
+            // 8. "Calibrate rotary" chip (Requirement 2.7)
+            item {
+                Chip(
+                    onClick = onOpenCalibration,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("calibrate_rotary_chip"),
+                    colors = ChipDefaults.secondaryChipColors(
+                        backgroundColor = WearSurface,
+                        contentColor = Color.White
+                    ),
+                    label = {
+                        Text(
+                            text = stringResource(R.string.calibrate_rotary_label),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = WearAccentCyan
+                        )
+                    }
+                )
             }
         }
     }

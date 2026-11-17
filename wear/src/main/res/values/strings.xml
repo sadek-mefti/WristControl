@@ -14,4 +14,10 @@
     <string name="sensitivity_low">Low</string>
     <string name="sensitivity_medium">Med</string>
     <string name="sensitivity_high">High</string>
+    <string name="ping_phone_label">Ping phone</string>
+    <string name="ping_no_reply">No reply</string>
+    <string name="calibrate_rotary_label">Calibrate rotary</string>
+    <string name="error_service_disabled">Turn on WristScroll in phone Accessibility settings</string>
+    <string name="error_phone_not_ready">Unlock your phone</string>
+    <string name="error_app_not_allowed">Open TikTok, Reels or Shorts on your phone</string>
 </resources>

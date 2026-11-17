@@ -1,6 +1,7 @@
 package com.wristscroll.remote
 
 import android.content.Context
+import android.os.SystemClock
 import com.google.android.gms.wearable.CapabilityClient
 import com.google.android.gms.wearable.CapabilityInfo
 import com.google.android.gms.wearable.MessageClient
@@ -33,6 +34,8 @@ data class WatchConnectionState(
 /**
  * Manages Wearable Data Layer discovery, live MessageClient listeners,
  * command sending, and heartbeat pings on the watch.
+ * Note: /wristscroll/ping is answered exclusively by PingListenerService so the phone
+ * never receives duplicate pongs.
  */
 class WearableClientManager(
     context: Context,
@@ -92,7 +95,6 @@ class WearableClientManager(
     }
 
     private fun updateNodeFromCapability(nodes: Set<Node>) {
-        // Prefer a nearby node if available
         val bestNode = nodes.firstOrNull { it.isNearby } ?: nodes.firstOrNull()
         _connectionState.update { current ->
             current.copy(
@@ -105,13 +107,12 @@ class WearableClientManager(
 
     /**
      * Sends a protocol command to the reachable phone node.
-     * Plays the success haptic pattern only after sendMessage succeeds.
+     * Clears lastError and plays the success haptic pattern after sendMessage succeeds.
      * Plays the error haptic pattern if there is no reachable phone or sendMessage fails.
      */
     fun sendCommand(command: String) {
         scope.launch {
             val nodeId = _connectionState.value.connectedNodeId ?: run {
-                // Attempt an immediate discovery lookup before failing
                 val discovered = try {
                     val info = capabilityClient
                         .getCapability(
@@ -141,7 +142,9 @@ class WearableClientManager(
                     )
                     .await()
 
-                // Play success haptic only after sendMessage succeeds
+                // Clear any previous error after a command is sent successfully
+                _connectionState.update { it.copy(lastError = null) }
+
                 if (command == Protocol.CMD_DOUBLE_TAP_LIKE) {
                     hapticController.playDoubleTapLike()
                 } else {
@@ -159,16 +162,30 @@ class WearableClientManager(
      * within Protocol.PING_TIMEOUT_MS (2000 ms).
      */
     suspend fun pingPhone(): Boolean {
-        val nodeId = _connectionState.value.connectedNodeId ?: return false
+        return pingPhoneRoundTripMs() != null
+    }
+
+    /**
+     * Sends an empty /wristscroll/ping message to the phone and returns the round-trip
+     * time in milliseconds, or null if no reply arrives within 2000 ms.
+     */
+    suspend fun pingPhoneRoundTripMs(): Long? {
+        val nodeId = _connectionState.value.connectedNodeId ?: return null
         val deferred = CompletableDeferred<Boolean>()
         pendingPongDeferred = deferred
+        val startMs = SystemClock.uptimeMillis()
         return try {
             messageClient.sendMessage(nodeId, Protocol.PATH_PING, ByteArray(0)).await()
-            withTimeoutOrNull(Protocol.PING_TIMEOUT_MS) {
+            val replied = withTimeoutOrNull(Protocol.PING_TIMEOUT_MS) {
                 deferred.await()
             } ?: false
+            if (replied) {
+                (SystemClock.uptimeMillis() - startMs).coerceAtLeast(0L)
+            } else {
+                null
+            }
         } catch (_: Exception) {
-            false
+            null
         } finally {
             pendingPongDeferred = null
         }
@@ -184,15 +201,6 @@ class WearableClientManager(
 
             Protocol.PATH_PONG -> {
                 pendingPongDeferred?.complete(true)
-            }
-
-            Protocol.PATH_PING -> {
-                val sourceNodeId = messageEvent.sourceNodeId
-                scope.launch {
-                    runCatching {
-                        messageClient.sendMessage(sourceNodeId, Protocol.PATH_PONG, ByteArray(0)).await()
-                    }
-                }
             }
         }
     }

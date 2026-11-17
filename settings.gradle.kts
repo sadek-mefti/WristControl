@@ -26,5 +26,4 @@ rootProject.name = "WristScroll"
 
 include(":shared")
 include(":wear")
-include(":mobile")
 include(":app")

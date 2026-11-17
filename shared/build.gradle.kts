@@ -14,3 +14,7 @@ kotlin {
     jvmTarget.set(JvmTarget.JVM_11)
   }
 }
+
+dependencies {
+  testImplementation(libs.junit)
+}

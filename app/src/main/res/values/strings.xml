@@ -5,11 +5,15 @@
     <string name="accessibility_service_description">Performs feed scroll, carousel swipe, pause tap, and double-tap like gestures triggered from your paired Wear OS watch in allowed media apps.</string>
     <string name="service_card_title">Accessibility Service</string>
     <string name="service_enabled">Enabled &amp; Ready</string>
+    <string name="service_enabled_not_running">Enabled but not running. Turn it off and on again in Accessibility settings.</string>
     <string name="service_disabled">Disabled — Required for Gestures</string>
+    <string name="restricted_settings_help">If WristScroll is greyed out on Android 13+: open App info, tap the ⋮ menu, choose \"Allow restricted settings\", then enable the service.</string>
+    <string name="open_app_info">Open App Info (Allow Restricted Settings)</string>
     <string name="open_accessibility_settings">Open Accessibility Settings</string>
     <string name="watch_card_title">Watch Connection</string>
     <string name="watch_connected">Connected: %1$s</string>
     <string name="watch_disconnected">Disconnected</string>
+    <string name="watch_one_way_latency">≈ %1$d ms watch → phone (from last ping)</string>
     <string name="test_ping_button">Test Ping</string>
     <string name="test_pad_title">Gesture Test Pad (3s Countdown)</string>
     <string name="btn_scroll_up">Scroll Up</string>
